@@ -478,6 +478,13 @@ nsresult WebrtcTCPSocket::OpenWithHttpProxy() {
     return rv;
   }
 
+  if (mTls) {
+    rv = httpChannel->SetWebRTCTURN(true);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return rv;
+    }
+  }
+
   rv = httpChannel->AsyncOpen(this);
 
   if (NS_FAILED(rv)) {

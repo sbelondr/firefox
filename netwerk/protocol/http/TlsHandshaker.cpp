@@ -159,18 +159,23 @@ nsresult TlsHandshaker::SetupNPNList(nsITLSSocketControl* ssl, uint32_t caps,
   // For NPN, In the case of overlap, matching priority is driven by
   // the order of the server's advertisement - with index 0 used when
   // there is no match.
-  protocolArray.AppendElement("http/1.1"_ns);
-
-  if (StaticPrefs::network_http_http2_enabled() &&
-      (connectingToProxy || !(caps & NS_HTTP_DISALLOW_SPDY)) &&
-      !(connectingToProxy && (caps & NS_HTTP_DISALLOW_HTTP2_PROXY))) {
-    LOG(("nsHttpConnection::SetupSSL Allow SPDY NPN selection"));
-    const SpdyInformation* info = gHttpHandler->SpdyInfo();
-    if (info->ALPNCallbacks(ssl)) {
-      protocolArray.AppendElement(info->VersionString);
-    }
+  if (!connectingToProxy && (caps & NS_HTTP_WEBRTC_TURN)) {
+    // ALPN should advertise "stun.turn" per RFC 7443
+    protocolArray.AppendElement("stun.turn"_ns);
   } else {
-    LOG(("nsHttpConnection::SetupSSL Disallow SPDY NPN selection"));
+    protocolArray.AppendElement("http/1.1"_ns);
+
+    if (StaticPrefs::network_http_http2_enabled() &&
+        (connectingToProxy || !(caps & NS_HTTP_DISALLOW_SPDY)) &&
+        !(connectingToProxy && (caps & NS_HTTP_DISALLOW_HTTP2_PROXY))) {
+      LOG(("nsHttpConnection::SetupSSL Allow SPDY NPN selection"));
+      const SpdyInformation* info = gHttpHandler->SpdyInfo();
+      if (info->ALPNCallbacks(ssl)) {
+        protocolArray.AppendElement(info->VersionString);
+      }
+    } else {
+      LOG(("nsHttpConnection::SetupSSL Disallow SPDY NPN selection"));
+    }
   }
 
   nsresult rv = ssl->SetNPNList(protocolArray);

@@ -180,6 +180,10 @@ inline bool IsHttp3(SupportedAlpnRank aRank) {
 // When set, we use HappyEyeballsConnectionAttempt to establish connection.
 #define NS_HTTP_USE_HAPPY_EYEBALLS (1 << 30)
 
+// When set, the secondary TLS target is a WebRTC TURN server.
+// Need to be used together with NS_HTTP_TLS_TUNNEL.
+#define NS_HTTP_WEBRTC_TURN (1 << 31)
+
 #define NS_HTTP_TRR_FLAGS_FROM_MODE(x) ((static_cast<uint32_t>(x) & 3) << 19)
 
 #define NS_HTTP_TRR_MODE_FROM_FLAGS(x) \

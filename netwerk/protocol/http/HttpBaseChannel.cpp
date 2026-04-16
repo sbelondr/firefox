@@ -3967,6 +3967,25 @@ HttpBaseChannel::SetConnectOnly(bool aTlsTunnel) {
 }
 
 NS_IMETHODIMP
+HttpBaseChannel::GetWebRTCTURN(bool* aWebRTCTURN) {
+  NS_ENSURE_ARG_POINTER(aWebRTCTURN);
+
+  *aWebRTCTURN = !!(mCaps & NS_HTTP_WEBRTC_TURN);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+HttpBaseChannel::SetWebRTCTURN(bool aWebRTCTURN) {
+  ENSURE_CALLED_BEFORE_CONNECT();
+  if (aWebRTCTURN) {
+    mCaps |= NS_HTTP_WEBRTC_TURN;
+  } else {
+    mCaps &= ~NS_HTTP_WEBRTC_TURN;
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 HttpBaseChannel::GetAllowSpdy(bool* aAllowSpdy) {
   NS_ENSURE_ARG_POINTER(aAllowSpdy);
 
