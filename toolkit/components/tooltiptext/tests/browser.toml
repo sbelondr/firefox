@@ -15,3 +15,5 @@ support-files = ["xul_tooltiptext.xhtml"]
 ["browser_nac_tooltip.js"]
 
 ["browser_shadow_dom_tooltip.js"]
+
+["browser_tooltip_keyboard_focus.js"]

@@ -16,6 +16,7 @@
 #include "nsAtom.h"
 #include "nsReadableUtils.h"
 #include "nsUnicharUtils.h"
+#include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/StaticPrefs_ui.h"
 
 // Interfaces needed to be included
@@ -38,6 +39,7 @@
 #include "nsIBrowserChild.h"
 #include "nsRect.h"
 #include "nsIContent.h"
+#include "nsIFrame.h"
 #include "nsServiceManagerUtils.h"
 #include "nsXULTooltipListener.h"
 #include "nsIConstraintValidation.h"
@@ -116,6 +118,7 @@ class ChromeTooltipListener final : public nsIDOMEventListener {
 
   NS_DECL_NSIDOMEVENTLISTENER
   NS_IMETHOD MouseMove(mozilla::dom::Event* aMouseEvent);
+  NS_IMETHOD Focus(mozilla::dom::Event* aFocusEvent);
 
   // Add/remove the relevant listeners, based on what interfaces the embedding
   // chrome implements.
@@ -1023,6 +1026,12 @@ ChromeTooltipListener::AddTooltipListener() {
                                                  false));
     MOZ_TRY(mEventTarget->AddSystemEventListener(u"mousemove"_ns, this, false,
                                                  false));
+    // focus/blur don't bubble, so they need to be captured in order to be
+    // seen on elements inside the content.
+    MOZ_TRY(
+        mEventTarget->AddSystemEventListener(u"focus"_ns, this, true, false));
+    MOZ_TRY(
+        mEventTarget->AddSystemEventListener(u"blur"_ns, this, true, false));
 
     mTooltipListenerInstalled = true;
   }
@@ -1053,6 +1062,8 @@ ChromeTooltipListener::RemoveTooltipListener() {
     mEventTarget->RemoveSystemEventListener(u"mousedown"_ns, this, false);
     mEventTarget->RemoveSystemEventListener(u"mouseout"_ns, this, false);
     mEventTarget->RemoveSystemEventListener(u"mousemove"_ns, this, false);
+    mEventTarget->RemoveSystemEventListener(u"focus"_ns, this, true);
+    mEventTarget->RemoveSystemEventListener(u"blur"_ns, this, true);
     mTooltipListenerInstalled = false;
   }
 
@@ -1078,6 +1089,12 @@ ChromeTooltipListener::HandleEvent(Event* aEvent) {
     return HideTooltip();
   } else if (eventType.EqualsLiteral("mousemove")) {
     return MouseMove(aEvent);
+  } else if (eventType.EqualsLiteral("focus")) {
+    return Focus(aEvent);
+  } else if (eventType.EqualsLiteral("blur")) {
+    // Reset flag so that tooltip will display on the next focus
+    mTooltipShownOnce = false;
+    return HideTooltip();
   }
 
   NS_ERROR("Unexpected event type");
@@ -1142,6 +1159,65 @@ nsresult ChromeTooltipListener::MouseMove(Event* aMouseEvent) {
   } else {
     mTooltipShownOnce = true;
     return HideTooltip();
+  }
+
+  return NS_OK;
+}
+
+// Handle focus events to show tooltips for keyboard navigation
+nsresult ChromeTooltipListener::Focus(Event* aFocusEvent) {
+  // Gated on browser.html.tooltips.show_on_focus so the feature can be
+  // toggled from about:config.
+  if (!StaticPrefs::browser_html_tooltips_show_on_focus()) {
+    return NS_OK;
+  }
+
+  // Only elements can have a tooltip text worth showing here; ignore focus
+  // events targeting the document or window itself.
+  nsCOMPtr<nsINode> node;
+  if (nsCOMPtr<EventTarget> eventTarget = aFocusEvent->GetOriginalTarget()) {
+    node = nsINode::FromEventTarget(eventTarget);
+  }
+  if (!node || !node->IsElement()) {
+    return NS_OK;
+  }
+
+  nsIFrame* frame = node->AsElement()->GetPrimaryFrame();
+  if (!frame) {
+    return NS_OK;
+  }
+
+  // Get the screen coordinates of the focused element so the tooltip can be
+  // anchored to it. ShowTooltip expects screen-relative position.
+  nsPresContext* presContext = frame->PresContext();
+  mMouseScreenPoint = LayoutDeviceIntPoint::FromAppUnitsRounded(
+      frame->GetScreenRectInAppUnits().BottomLeft(),
+      presContext->AppUnitsPerDevPixel());
+
+  // Hide any tooltip currently shown (e.g. from mouse hover) and cancel any
+  // pending timer before starting a new one.
+  if (mShowingTooltip) {
+    HideTooltip();
+  }
+  if (mTooltipTimer) {
+    mTooltipTimer->Cancel();
+    mTooltipTimer = nullptr;
+  }
+
+  mPossibleTooltipNode = node;
+
+  // Reset flag so that tooltip will display
+  mTooltipShownOnce = false;
+
+  // Start a new timer to show the tooltip, reusing the same delay and
+  // callback as mouse hover.
+  nsresult rv = NS_NewTimerWithFuncCallback(
+      getter_AddRefs(mTooltipTimer), sTooltipCallback, this,
+      StaticPrefs::ui_tooltip_delay_ms(), nsITimer::TYPE_ONE_SHOT,
+      "ChromeTooltipListener::Focus"_ns, GetMainThreadSerialEventTarget());
+  if (NS_FAILED(rv)) {
+    mPossibleTooltipNode = nullptr;
+    NS_WARNING("Could not create a timer for tooltip tracking");
   }
 
   return NS_OK;

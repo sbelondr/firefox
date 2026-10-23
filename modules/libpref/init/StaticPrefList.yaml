@@ -1782,6 +1782,14 @@
   value: false
   mirror: always
 
+# Whether HTML tooltips (title attribute) are shown when an element
+# receives keyboard focus (e.g. via the Tab key). This makes tooltip
+# content accessible to keyboard-only users.
+- name: browser.html.tooltips.show_on_focus
+  type: bool
+  value: false
+  mirror: always
+
 # If false, show internal error page for HTTP responses with error
 # codes (4xx, 5xx) and "Content-Length": 0 instead of blank page
 # See https://bugzilla.mozilla.org/show_bug.cgi?id=1325876#c32 for why this
